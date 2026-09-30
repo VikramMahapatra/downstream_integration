@@ -85,9 +85,22 @@ async def receive(
     """Public endpoint. Authentication is the provider-specific payload token/signature,
     verified inside `parse_webhook`; we ACK fast and process asynchronously."""
     body = await request.json()
+    
+    print(f"Received webhook for provider {provider}, connection {connection_id}: {body}")
 
     async with session_scope() as session:
         conn = await session.get(Connection, connection_id)
+        
+        print(
+            "WEBHOOK CONNECTION CHECK:",
+            {
+                "connection_id": connection_id,
+                "provider_from_url": provider,
+                "connection_exists": conn is not None,
+                "db_provider": conn.provider if conn else None,
+            },
+        )
+        
         if conn is None or conn.provider != provider:
             raise HTTPException(status_code=404, detail="Unknown connection")
         connector = build_connector(conn)

@@ -49,6 +49,21 @@ async def create_connection(
     payload: ConnectionCreate, session: AsyncSession = Depends(get_session)
 ) -> Connection:
     get_connector_class(payload.provider)  # validates the provider exists
+    
+    # Check existing connection
+    result = await session.execute(
+        select(Connection).where(
+            Connection.tenant_id == payload.tenant_id,
+            Connection.provider == payload.provider,
+            Connection.name == payload.name,
+        )
+    )
+
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        return existing
+    
     conn = Connection(
         tenant_id=payload.tenant_id,
         provider=payload.provider,

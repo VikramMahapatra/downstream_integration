@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     app_env: str = "local"
     log_level: str = "INFO"
-    api_base_url: str = "http://localhost:8000"
+    api_base_url: str = "http://localhost:9000"
     # Shared key required on every /v1 call (webhook endpoints excluded).
     service_api_key: str = ""
 
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # ---- Zoho CRM ----
     zoho_client_id: str = ""
     zoho_client_secret: str = ""
-    zoho_redirect_uri: str = "http://localhost:8000/v1/oauth/zoho_crm/callback"
+    zoho_redirect_uri: str = "http://localhost:9000/v1/oauth/zoho_crm/callback"
     zoho_default_dc: str = "com"
     zoho_api_version: str = "v8"
     zoho_webhook_token: str = ""

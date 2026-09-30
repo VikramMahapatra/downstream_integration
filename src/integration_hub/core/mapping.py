@@ -59,12 +59,36 @@ def _strip(v: Any) -> Any:
 
 @transform("datetime")
 def _to_datetime(v: Any) -> Any:
-    if not v:
+    if v is None or v == "":
         return None
+
     if isinstance(v, datetime):
         return v
-    text = str(v).replace("Z", "+00:00")
+
+    # Unix timestamp
+    if isinstance(v, (int, float)):
+        # Zoho server_time is milliseconds
+        if v > 10_000_000_000:
+            v = v / 1000
+
+        return datetime.fromtimestamp(v, tz=timezone.utc)
+
+    text = str(v).strip()
+
+    # Numeric timestamp represented as a string
+    if text.isdigit():
+        timestamp = int(text)
+
+        # milliseconds -> seconds
+        if timestamp > 10_000_000_000:
+            timestamp = timestamp / 1000
+
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+    # ISO-8601 datetime
+    text = text.replace("Z", "+00:00")
     dt = datetime.fromisoformat(text)
+
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 

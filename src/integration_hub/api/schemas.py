@@ -109,6 +109,7 @@ class StagedRecordOut(BaseModel):
 
     external_id: str
     object_type: str
+    content_hash: str
     payload: dict[str, Any]
     deleted: bool
     remote_updated_at: datetime | None
