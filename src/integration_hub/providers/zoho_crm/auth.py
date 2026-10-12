@@ -58,13 +58,13 @@ def api_host(dc: str) -> str:
     return API_HOSTS.get(dc, API_HOSTS["com"])
 
 
-def build_authorize_url(*, dc: str, state: str, scopes: list[str] | None = None) -> str:
+def build_authorize_url(*, client_id: str, dc: str, state: str, scopes: list[str] | None = None) -> str:
     s = get_settings()
-    if not s.zoho_client_id:
+    if not client_id:
         raise ConfigurationError("ZOHO_CLIENT_ID is not configured")
     params = {
         "scope": ",".join(scopes or DEFAULT_SCOPES),
-        "client_id": s.zoho_client_id,
+        "client_id": client_id,
         "response_type": "code",
         # access_type=offline + prompt=consent is what makes Zoho return a refresh_token.
         "access_type": "offline",
@@ -75,25 +75,25 @@ def build_authorize_url(*, dc: str, state: str, scopes: list[str] | None = None)
     return f"{accounts_host(dc)}/oauth/v2/auth?{urlencode(params)}"
 
 
-async def exchange_code(code: str, *, dc: str, accounts_server: str | None = None) -> dict:
+async def exchange_code(code: str, *, client_id: str, client_secret: str, dc: str, accounts_server: str | None = None) -> dict:
     s = get_settings()
     host = accounts_server.rstrip("/") if accounts_server else accounts_host(dc)
     data = {
         "grant_type": "authorization_code",
-        "client_id": s.zoho_client_id,
-        "client_secret": s.zoho_client_secret,
+        "client_id": client_id,
+        "client_secret": client_secret,
         "redirect_uri": s.zoho_redirect_uri,
         "code": code,
     }
     return await _token_request(f"{host}/oauth/v2/token", data)
 
 
-async def refresh_access_token(refresh_token: str, *, dc: str) -> dict:
+async def refresh_access_token(refresh_token: str, *, client_id: str, client_secret: str, dc: str) -> dict:
     s = get_settings()
     data = {
         "grant_type": "refresh_token",
-        "client_id": s.zoho_client_id,
-        "client_secret": s.zoho_client_secret,
+        "client_id": client_id,
+        "client_secret": client_secret,
         "refresh_token": refresh_token,
     }
     return await _token_request(f"{accounts_host(dc)}/oauth/v2/token", data)
@@ -126,6 +126,8 @@ class ZohoTokenManager:
     def __init__(self, ctx: ConnectionContext):
         self.ctx = ctx
         self.dc: str = ctx.config.get("dc") or get_settings().zoho_default_dc
+        self.client_id: str = ctx.config.get("client_id")
+        self.client_secret: str = ctx.config.get("client_secret")
 
     @property
     def api_domain(self) -> str:
@@ -148,7 +150,7 @@ class ZohoTokenManager:
         refresh_token = self.ctx.secrets.get("refresh_token")
         if not refresh_token:
             raise AuthError("Zoho connection has no refresh token; re-authorize", provider="zoho_crm")
-        payload = await refresh_access_token(refresh_token, dc=self.dc)
+        payload = await refresh_access_token(refresh_token, client_id=self.client_id, client_secret=self.client_secret, dc=self.dc)
         updates = {
             "access_token": payload["access_token"],
             "expires_at": time.time() + float(payload.get("expires_in", 3600)) - EXPIRY_SKEW_SECONDS,

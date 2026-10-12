@@ -38,7 +38,15 @@ async def authorize(
         )
     )
     dc = conn.config.get("dc") or get_settings().zoho_default_dc
-    return AuthorizeOut(authorize_url=zoho_auth.build_authorize_url(dc=dc, state=state), state=state)
+    client_id = conn.config.get("client_id")
+
+    if not client_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Zoho client ID is not configured for this connection",
+        )
+        
+    return AuthorizeOut(authorize_url=zoho_auth.build_authorize_url(client_id=client_id, dc=dc, state=state), state=state)
 
 
 @router.get("/zoho_crm/callback")
@@ -48,6 +56,7 @@ async def zoho_callback(
     error: str | None = None,
     location: str | None = None,
     accounts_server: str | None = Query(default=None, alias="accounts-server"),
+    session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     """Zoho redirects here with ?code, ?location (data centre) and ?accounts-server."""
     if error or not code:
@@ -62,10 +71,17 @@ async def zoho_callback(
 
     if not connection_id:
         raise HTTPException(status_code=400, detail="OAuth state is not bound to a connection")
+    
+    conn = await session.get(Connection, connection_id)
+    if conn is None:
+        raise HTTPException(status_code=404, detail="Connection not found")
 
-    dc = location or get_settings().zoho_default_dc
+    dc = location or conn.config.get("dc")
+    client_id = conn.config.get("client_id")
+    client_secret = conn.config.get("client_secret")
+    
     try:
-        token = await zoho_auth.exchange_code(code, dc=dc, accounts_server=accounts_server)
+        token = await zoho_auth.exchange_code(code, client_id=client_id, client_secret=client_secret, dc=dc, accounts_server=accounts_server)
     except AuthError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
 
