@@ -46,11 +46,11 @@ async def provider_streams(provider: str) -> list[dict]:
 
 @router.post("/connections", response_model=ConnectionOut, status_code=201)
 async def create_connection(
-    payload: ConnectionCreate, session: AsyncSession = Depends(get_session)
+    payload: ConnectionCreate,
+    session: AsyncSession = Depends(get_session),
 ) -> Connection:
-    get_connector_class(payload.provider)  # validates the provider exists
-    
-    # Check existing connection
+    get_connector_class(payload.provider)
+
     result = await session.execute(
         select(Connection).where(
             Connection.tenant_id == payload.tenant_id,
@@ -62,19 +62,43 @@ async def create_connection(
     existing = result.scalar_one_or_none()
 
     if existing:
+        # Update existing connection configuration
+        existing.config = payload.config
+
+        # Update encrypted secrets only when new secrets are supplied
+        if payload.secrets:
+            existing.secrets_encrypted = encrypt_secrets(
+                payload.secrets
+            )
+
+        # Keep OAuth pending until authorization is completed
+        existing.status = ConnectionStatus.PENDING_AUTH
+        existing.last_error = None
+
+        await session.flush()
+        await session.refresh(existing)
         return existing
-    
+
+    # Create a new connection
     conn = Connection(
         tenant_id=payload.tenant_id,
         provider=payload.provider,
         name=payload.name,
         config=payload.config,
-        status=ConnectionStatus.ACTIVE if payload.secrets else ConnectionStatus.PENDING_AUTH,
-        secrets_encrypted=encrypt_secrets(payload.secrets) if payload.secrets else None,
+        status=ConnectionStatus.PENDING_AUTH,
+        secrets_encrypted=(
+            encrypt_secrets(payload.secrets)
+            if payload.secrets
+            else None
+        ),
     )
+
     session.add(conn)
     await session.flush()
+    await session.refresh(conn)
+
     return conn
+
 
 
 @router.get("/connections", response_model=list[ConnectionOut])
